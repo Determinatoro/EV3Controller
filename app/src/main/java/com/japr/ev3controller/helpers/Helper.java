@@ -20,17 +20,9 @@ public class Helper {
     //********************************************/
     public static void requestPermissions(Activity activity, int permissionRequestCode) {
         String[] arr = new String[]{
-                Manifest.permission.ACCESS_NETWORK_STATE,
                 Manifest.permission.BLUETOOTH,
                 Manifest.permission.BLUETOOTH_ADMIN,
-                Manifest.permission.INTERNET,
-                Manifest.permission.VIBRATE,
-                Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.READ_PHONE_STATE,
-                Manifest.permission.WRITE_EXTERNAL_STORAGE,
-                Manifest.permission.READ_EXTERNAL_STORAGE,
-                Manifest.permission.WAKE_LOCK,
-                Manifest.permission.CAMERA
+                Manifest.permission.ACCESS_COARSE_LOCATION
         };
         ActivityCompat.requestPermissions(activity,
                 arr, permissionRequestCode);

@@ -28,32 +28,27 @@ public class BluetoothHelper {
 
     //region Variables
 
+    private String TAG = "BluetoothHelper";
+
     private Activity activity;
     private BluetoothAdapter bluetoothAdapter = null;
 
-    private String TAG = "BluetoothHelper";
     private static final UUID SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
-
-    private boolean readData = false;
-
     private BluetoothSocket bluetoothSocket;
     private InputStream inputStream;
     private OutputStream outputStream;
 
+    // Flags
+    private boolean readData;
+
+    // Listeners
     private OnBluetoothListener onBluetoothListener;
 
+    // Threads
     private ConnectThread connectThread;
     private ConnectedThread connectedThread;
 
-    private String deviceSearchName = null;
-    private boolean searchForDevices = false;
-
-    private List<BluetoothDevice> bluetoothDevices;
-
-    //endregion
-
-    //region Properties
-
+    // Enums
     public enum BluetoothState {
         CONNECTING,
         CONNECTED,
@@ -62,7 +57,14 @@ public class BluetoothHelper {
         NOTHING
     }
 
+    // Properties
+    private String deviceSearchName = null;
+    private List<BluetoothDevice> bluetoothDevices;
     private BluetoothState bluetoothState = BluetoothState.NOTHING;
+
+    //endregion
+
+    //region Properties
 
     public BluetoothState getBluetoothState() {
         return bluetoothState;
@@ -72,12 +74,17 @@ public class BluetoothHelper {
         this.bluetoothState = bluetoothState;
     }
 
+    public List<BluetoothDevice> getBluetoothDevices() {
+        return bluetoothDevices;
+    }
+
     //endregion
 
     //region Interface
 
     public interface OnBluetoothListener {
         void bluetoothMessageReceived(String message);
+        void foundBluetoothDevice(List<BluetoothDevice> bluetoothDevices, BluetoothDevice bluetoothDevice);
     }
 
     //endregion
@@ -91,33 +98,6 @@ public class BluetoothHelper {
         bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
 
         if (bluetoothAdapter != null) {
-            BroadcastReceiver receiver = new BroadcastReceiver() {
-                @Override
-                public void onReceive(Context context, Intent intent) {
-                    try {
-                        String action = intent.getAction();
-
-                        if (BluetoothDevice.ACTION_FOUND.equals(action)) {
-                            BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-                            if (device.getBondState() == BluetoothDevice.BOND_BONDED) {
-                                if (device.getName().startsWith(deviceSearchName)) {
-                                    if (!bluetoothDevices.contains(device))
-                                        bluetoothDevices.add(device);
-                                }
-                            }
-                        } else if (BluetoothAdapter.ACTION_DISCOVERY_FINISHED.equals(action)) {
-                            if (searchForDevices) {
-                                if (bluetoothAdapter != null) {
-                                    if (bluetoothAdapter.isEnabled()) {
-                                        searchForDevices(deviceSearchName);
-                                    }
-                                }
-                            }
-                        }
-                    } catch (Exception ignored) {}
-                }
-            };
-
             IntentFilter filter = new IntentFilter(BluetoothDevice.ACTION_FOUND);
             activity.registerReceiver(receiver, filter);
 
@@ -126,13 +106,47 @@ public class BluetoothHelper {
         }
     }
 
+    BroadcastReceiver receiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            try {
+                String action = intent.getAction();
+
+                if (BluetoothDevice.ACTION_FOUND.equals(action)) {
+                    BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+                    if (device.getBondState() == BluetoothDevice.BOND_BONDED) {
+                        if (device.getName().startsWith(deviceSearchName)) {
+                            if (bluetoothDevices == null)
+                                bluetoothDevices = new ArrayList<>();
+
+                            if (!bluetoothDevices.contains(device)) {
+                                bluetoothDevices.add(device);
+                                if (onBluetoothListener != null)
+                                    onBluetoothListener.foundBluetoothDevice(bluetoothDevices, device);
+                            }
+                        }
+                    }
+                } else if (BluetoothAdapter.ACTION_DISCOVERY_FINISHED.equals(action)) {
+                    if (bluetoothState == BluetoothState.SEARCHING) {
+                        if (bluetoothAdapter != null) {
+                            if (bluetoothAdapter.isEnabled()) {
+                                searchForDevices(deviceSearchName);
+                            }
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+    };
+
     //endregion
 
     //region Functions
 
     public void searchForDevices(String deviceSearchName) {
+        this.bluetoothDevices = new ArrayList<>();
+
         this.deviceSearchName = deviceSearchName;
-        searchForDevices = true;
 
         setBluetoothState(BluetoothState.SEARCHING);
         bluetoothDevices = new ArrayList<>();
@@ -142,7 +156,6 @@ public class BluetoothHelper {
 
     public void endSearchForDevices() {
         this.deviceSearchName = null;
-        searchForDevices = false;
 
         setBluetoothState(BluetoothState.NOTHING);
         if (bluetoothAdapter.isDiscovering())
@@ -168,6 +181,14 @@ public class BluetoothHelper {
         });
     }
 
+    public void connect(BluetoothDevice bluetoothDevice) {
+        if (connectThread != null && connectThread.isAlive())
+            connectThread.interrupt();
+
+        connectThread = new ConnectThread(bluetoothDevice);
+        connectThread.start();
+    }
+
     public void disconnect() {
         if (outputStream != null) {
             try {
@@ -189,6 +210,7 @@ public class BluetoothHelper {
 
         try {
             bluetoothSocket.close();
+            activity.unregisterReceiver(receiver);
         } catch (IOException ignored) {}
     }
 
