@@ -1,3 +1,7 @@
 <resources>
     <string name="app_name">EV3 Controller</string>
+
+    <string name="error">Fejl</string>
+    <string name="not_all_permissions_granted_error_message">App\'en har brug for alle tilladelser for at fungere ordentligt. Venligst giv app\'en alle tilladelser</string>
+
 </resources>
