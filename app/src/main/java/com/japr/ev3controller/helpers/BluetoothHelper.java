@@ -20,6 +20,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static android.content.ContentValues.TAG;
@@ -72,6 +73,11 @@ public class BluetoothHelper {
 
     public void setBluetoothState(BluetoothState bluetoothState) {
         this.bluetoothState = bluetoothState;
+
+        if (bluetoothState == BluetoothState.DISCONNECTED) {
+            if (deviceSearchName != null)
+                searchForDevices(deviceSearchName);
+        }
     }
 
     public List<BluetoothDevice> getBluetoothDevices() {
@@ -145,11 +151,23 @@ public class BluetoothHelper {
 
     public void searchForDevices(String deviceSearchName) {
         this.bluetoothDevices = new ArrayList<>();
-
         this.deviceSearchName = deviceSearchName;
-
         setBluetoothState(BluetoothState.SEARCHING);
-        bluetoothDevices = new ArrayList<>();
+
+        // Get bonded devices
+        Set<BluetoothDevice> bondedBluetoothDevices = bluetoothAdapter.getBondedDevices();
+        for (BluetoothDevice temp : bondedBluetoothDevices) {
+            try {
+                if (temp.getName() != null && temp.getName().startsWith(this.deviceSearchName)) {
+                    if (onBluetoothListener != null)
+                        onBluetoothListener.foundBluetoothDevice(bluetoothDevices, temp);
+                }
+            } catch (Exception mes) {
+                String test = "";
+            }
+        }
+
+        // Start discovery
         if (bluetoothAdapter != null)
             bluetoothAdapter.startDiscovery();
     }
@@ -163,7 +181,7 @@ public class BluetoothHelper {
     }
 
     public void sendMessage(String message) {
-        AsyncTask.execute(() -> {
+        Runnable runnable = () -> {
             if (outputStream != null) {
                 Log.d(TAG, "Sending: " + message);
 
@@ -178,18 +196,28 @@ public class BluetoothHelper {
                     outputStream.write(bytes);
                 } catch (IOException ignored) {}
             }
-        });
+        };
+
+        new Thread(runnable).start();
     }
 
     public void connect(BluetoothDevice bluetoothDevice) {
+        endSearchForDevices();
+
         if (connectThread != null && connectThread.isAlive())
             connectThread.interrupt();
 
         connectThread = new ConnectThread(bluetoothDevice);
+        connectThread.setName("[Bluetooth] ConnectThread");
         connectThread.start();
     }
 
     public void disconnect() {
+        try {
+            bluetoothSocket.close();
+            activity.unregisterReceiver(receiver);
+        } catch (IOException ignored) {}
+
         if (outputStream != null) {
             try {
                 outputStream.flush();
@@ -207,11 +235,6 @@ public class BluetoothHelper {
         }
 
         inputStream = null;
-
-        try {
-            bluetoothSocket.close();
-            activity.unregisterReceiver(receiver);
-        } catch (IOException ignored) {}
     }
 
     //endregion
@@ -227,34 +250,45 @@ public class BluetoothHelper {
 
         ConnectThread(BluetoothDevice device) {
             this.device = device;
-            try {
-                tmp = device.createInsecureRfcommSocketToServiceRecord(SPP_UUID);
-            } catch (Exception ignored) {
-            }
-            bluetoothSocket = tmp;
+
         }
 
         public void run() {
             Log.i(TAG, "Connecting...");
 
-            try {
-                setBluetoothState(BluetoothState.CONNECTING);
-                bluetoothSocket.connect();
-            } catch (IOException e) {
-                setBluetoothState(BluetoothState.DISCONNECTED);
+            int i = 0;
+            while (i++ < 2) {
+                try {
+                    tmp = device.createInsecureRfcommSocketToServiceRecord(SPP_UUID);
+                } catch (Exception ignored) {
+                }
+                bluetoothSocket = tmp;
 
                 try {
-                    Log.i(TAG, "Closing socket...");
-                    bluetoothSocket.close();
-                } catch (IOException e2) {
-                    Log.e(TAG, "Fail on closing socket...", e2);
-                }
+                    setBluetoothState(BluetoothState.CONNECTING);
+                    bluetoothSocket.connect();
+                    break;
+                } catch (IOException e) {
+                    setBluetoothState(BluetoothState.DISCONNECTED);
 
+                    try {
+                        Log.i(TAG, "Closing socket...");
+                        bluetoothSocket.close();
+                    } catch (IOException e2) {
+                        Log.e(TAG, "Fail on closing socket...", e2);
+                    }
+                }
+            }
+
+            if (i == 2) {
+                searchForDevices(deviceSearchName);
                 return;
             }
 
             connectedThread = new ConnectedThread();
+            connectedThread.setName("[Bluetooth] ConnectedThread");
             connectedThread.start();
+
         }
     }
 
@@ -274,6 +308,7 @@ public class BluetoothHelper {
         }
 
         public void run() {
+
             setBluetoothState(BluetoothState.CONNECTED);
             Log.i(TAG, "Connected...");
             readData = true;
@@ -285,16 +320,17 @@ public class BluetoothHelper {
 
                 if (readData) {
                     try {
-                        while (inputStream.available() > 0) {
-                            char character = (char) inputStream.read();
-                            if (onBluetoothListener != null) {
-                                onBluetoothListener.bluetoothMessageReceived(String.valueOf(character));
-                            }
+                        char character = (char) inputStream.read();
+                        Log.d(TAG, "Receiving: " + character);
+                        if (onBluetoothListener != null) {
+                            onBluetoothListener.bluetoothMessageReceived(String.valueOf(character));
                         }
                     } catch (Exception ignored) {
                     }
                 }
             }
+
+            setBluetoothState(BluetoothState.DISCONNECTED);
         }
     }
 

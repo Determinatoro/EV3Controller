@@ -1,19 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context="com.japr.ev3controller.MainActivity">
+    android:id="@+id/rlRoot"
+    >
 
-    <Button
-        android:id="@+id/btnSendCommand"
-        android:layout_width="match_parent"
-        android:layout_height="60dp" />
+    <!--TOOLBAR-->
+    <include android:id="@+id/toolbar"
+        layout="@layout/item_layout_toolbar"
+        />
 
-    <Button
-        android:id="@+id/btnStop"
+    <RelativeLayout
+        android:id="@+id/rlContent"
+        android:layout_below="@+id/toolbar"
         android:layout_width="match_parent"
-        android:layout_height="60dp"
-        android:layout_below="@+id/btnSendCommand"/>
+        android:layout_height="match_parent">
+
+
+
+    </RelativeLayout>
 
 </RelativeLayout>

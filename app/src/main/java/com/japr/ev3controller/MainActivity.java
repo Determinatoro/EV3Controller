@@ -12,32 +12,38 @@ import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.Button;
+import android.widget.TextView;
 
 import com.japr.ev3controller.helpers.BluetoothHelper;
+import com.japr.ev3controller.helpers.EV3Helper;
 import com.japr.ev3controller.helpers.Helper;
 
 import java.util.List;
 
 public class MainActivity extends AppCompatActivity implements BluetoothHelper.OnBluetoothListener, View.OnClickListener{
 
-    private Button btnSendCommand;
-    private Button btnStop;
+    private Button btnSendCommand, btnStop;
+    private TextView tvText;
 
     private BluetoothHelper bluetoothHelper;
+    private Runnable actionAfterPermissions;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        btnSendCommand = findViewById(R.id.btnSendCommand);
-        btnStop = findViewById(R.id.btnStop);
-        btnSendCommand.setOnClickListener(this);
-        btnStop.setOnClickListener(this);
+        Helper.setupToolbar(this, R.id.toolbar, getString(R.string.app_name), null, false, 0xFF202020, 0xFF202020);
 
         // PERMISSIONS
 
-        Helper.requestPermissions(this, 0);
+        actionAfterPermissions = () -> {
+            bluetoothHelper = new BluetoothHelper(MainActivity.this, MainActivity.this);
+            bluetoothHelper.searchForDevices("EV3");
+        };
+
+        if (Helper.requestPermissions(this))
+            runOnUiThread(actionAfterPermissions);
     }
 
     // onRequestPermissionsResult
@@ -61,16 +67,15 @@ public class MainActivity extends AppCompatActivity implements BluetoothHelper.O
             }
         }
 
-        bluetoothHelper = new BluetoothHelper(this, this);
-        bluetoothHelper.searchForDevices("EV3");
+        runOnUiThread(actionAfterPermissions);
     }
 
     @Override
     protected void onDestroy() {
-        super.onDestroy();
-
         if (bluetoothHelper != null)
             bluetoothHelper.disconnect();
+
+        super.onDestroy();
     }
 
     String message = "";
@@ -88,11 +93,9 @@ public class MainActivity extends AppCompatActivity implements BluetoothHelper.O
     @Override
     public void onClick(View view) {
         if (view == btnSendCommand) {
-            char[] chars = new char[]{0x0D, 0x00, 0x2A, 0x00, 0x80, 0x00, 0x00, 0xA4, 0x00, 0x01, 0x81, 0x64, 0xA6, 0x00, 0x01};
-            bluetoothHelper.sendMessage(new String(chars));
+            bluetoothHelper.sendMessage(EV3Helper.startMotorCommand(new EV3Helper.Motor[]{EV3Helper.Motor.B, EV3Helper.Motor.C}, new char[]{100, (char)-100}));
         } else if (view == btnStop) {
-            char[] chars = new char[]{0x09, 0x00, 0x2A, 0x00, 0x00, 0x00, 0x00, 0xA3, 0x00, 0x0F, 0x00};
-            bluetoothHelper.sendMessage(new String(chars));
+            bluetoothHelper.sendMessage(EV3Helper.stopMotors());
         }
     }
 }
